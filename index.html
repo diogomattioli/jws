@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Grid Component</title>
+    <script src="https://unpkg.com/vue"></script>
+    <script src='https://cdnjs.cloudflare.com/ajax/libs/axios/0.18.0/axios.js'></script>
+    <link rel="stylesheet" type="text/css" href="style.css" />
+
+    <!-- component template -->
+    <script type="text/x-template" id="grid-template">
+        <table>
+            <thead>
+            <tr>
+                <th v-for="key in columns"
+                    @click="sortBy(key)"
+                    :class="{ active: sortKey == key }">
+                    {{ key | capitalize }}
+                    <span class="arrow" :class="sortOrders[key] > 0 ? 'asc' : 'dsc'">
+                    </span>
+                </th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr v-for="entry in filteredEntries">
+                <td v-for="key in columns" @click="onclick(entry)">
+                    {{entry[key]}}
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </script>
+
+    <script type="text/x-template" id="modal-template">
+        <transition name="modal">
+            <div class="modal-mask">
+                <div class="modal-wrapper" @click="onclose()">
+                    <div class="modal-container" @click.stop="">
+
+                        <div class="modal-header">
+                            <slot name="header">
+                                default header
+                            </slot>
+                        </div>
+
+                        <div class="modal-body">
+                            <slot name="body">
+                                default body
+                            </slot>
+                        </div>
+
+                        <div class="modal-footer">
+                            <slot name="footer">
+                                <button class="modal-default-button" @click="onupdate()">
+                                    Alterar
+                                </button>
+                                <button class="modal-default-button" @click="ondelete()">
+                                    Excluir
+                                </button>
+                                <button class="modal-default-button" @click="onsave()">
+                                    Salvar
+                                </button>
+                                <button class="modal-default-button">
+                                    Cancelar
+                                </button>
+                            </slot>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </transition>
+    </script>
+
+</head>
+<body>
+
+<div id="grid" style="width: 100%">
+    <form id="search">
+        Search <input name="query" v-model="searchQuery" />
+    </form>
+    <grid style="width: 100%" v-model="gridData"
+        :entries="gridData"
+        :columns="gridColumns"
+        :filter-key="searchQuery"
+    >
+    </grid>
+</div>
+
+<div id="modal">
+    <button id="show-modal" @click="open()">Show Modal</button>
+    <modal v-if="showModal" @close="showModal = false">
+        <h3 slot="header">custom header</h3>
+        <div slot="body">
+            Id: {{entry.id}} <br/>
+            T&iacute;tulo:
+            <input name="titulo" v-model="entry.titulo" :disabled="disabled == true">
+        </div>
+    </modal>
+</div>
+
+<script>
+    var url = "/auth/marca/"
+
+    // register modal component
+    Vue.component("modal", {
+        template: "#modal-template",
+        methods: {
+            onclose: function() {
+                if (modal.disabled || confirm("Os dados serao perdidos, tem certeza?")) {
+                    modal.showModal = false
+                }
+            },
+            onupdate: function() {
+                modal.disabled = !modal.disabled
+            },
+            ondelete: function() {
+                crudDelete()
+            },
+            onsave: function() {
+                crudSave()
+            },
+        }
+    });
+
+    // start app
+    var modal = new Vue({
+        el: "#modal",
+        data: {
+            showModal: false,
+            disabled: true,
+            entry : {},
+            open: function() {
+                this.entry = {}
+                this.disabled = false
+                this.showModal = true
+            }
+        },
+    });
+
+    // register the grid component
+    Vue.component("grid", {
+        template: "#grid-template",
+        props: {
+            entries: Array,
+            columns: Array,
+            filterKey: String
+        },
+        data: function() {
+            console.log("data")
+            var sortOrders = {};
+            this.columns.forEach(function(key) {
+                sortOrders[key] = 1;
+            });
+            return {
+                sortKey: "",
+                sortOrders: sortOrders
+            };
+        },
+        computed: {
+            filteredEntries: function() {
+                console.log("filtered")
+                var sortKey = this.sortKey;
+                var filterKey = this.filterKey && this.filterKey.toLowerCase();
+                var order = this.sortOrders[sortKey] || 1;
+                var entries = this.entries;
+                if (filterKey) {
+                    entries = entries.filter(function(row) {
+                        return Object.keys(row).some(function(key) {
+                            return (
+                                String(row[key])
+                                    .toLowerCase()
+                                    .indexOf(filterKey) > -1
+                            );
+                        });
+                    });
+                }
+                if (sortKey) {
+                    entries = entries.slice().sort(function(a, b) {
+                        a = a[sortKey];
+                        b = b[sortKey];
+                        return (a === b ? 0 : a > b ? 1 : -1) * order;
+                    });
+                }
+                return entries;
+            }
+        },
+        filters: {
+            capitalize: function(str) {
+                return str.charAt(0).toUpperCase() + str.slice(1);
+            }
+        },
+        methods: {
+            sortBy: function(key) {
+                console.log("sortBy")
+                this.sortKey = key;
+                this.sortOrders[key] = this.sortOrders[key] * -1;
+                reload()
+            },
+            onclick: function(entry) {
+                fetch(url + entry.id).then((response) => {
+                    return response.json().then((json) => {
+                        console.log("JSON", json)
+                        modal.entry = json
+                        modal.disabled = true
+                        modal.showModal = true
+                    })
+                })
+            }
+        }
+    });
+
+    // bootstrap the demo
+    var grid = new Vue({
+        el: "#grid",
+        data: {
+            searchQuery: "",
+            sortKey: "",
+            gridColumns: ["id", "titulo"],
+            gridData: []
+        },
+        beforeMount: function() {
+            reload()
+        },
+    });
+
+    function error_handling(error) {
+        alert(error)
+    }
+
+    async function load() {
+        console.log("load")
+        await axios.get(url)
+            .then((data) => {
+                console.log(data)
+                return data.data.data
+            })
+            .catch(function (error) {
+                error_handling(error)
+                return null
+            })
+    }
+
+    function reload() {
+        console.log("reload")
+        axios.get(url)
+            .then((data) => {
+                grid.gridData = data.data.data
+                modal.showModal = false
+            })
+            .catch(function (error) {
+                error_handling(error)
+            })
+    }
+
+    function crudSave() {
+        request = modal.entry.id ? axios.patch(url, modal.entry) : axios.post(url, modal.entry, { headers: {'Content-type': 'application/x-www-form-urlencoded'}})
+        request
+            .then(function (response) {
+                reload()
+                return true
+            })
+            .catch(function (error) {
+                error_handling(error)
+                return false
+            })
+    }
+
+    function crudDelete() {
+        if (confirm("Deseja excluir?")) {
+            let vm = this
+            axios.delete(url + modal.entry.id)
+                .then(function (response) {
+                    reload()
+                })
+                .catch(function (error) {
+                    error_handling(error)
+                })
+        }
+    }
+</script>
+</body>
+</html>
