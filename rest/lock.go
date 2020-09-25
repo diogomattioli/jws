@@ -1,4 +1,4 @@
-package system
+package rest
 
 import (
 	"net/http"
@@ -10,12 +10,12 @@ const interval = time.Duration(5) * time.Minute
 
 type lockKey struct {
 	Type string
-	Id int
+	ID   int
 }
 
 type lockValue struct {
 	Token string
-	Date time.Time
+	Date  time.Time
 }
 
 var locks = sync.Map{}
@@ -28,57 +28,41 @@ func lockable(key lockKey, token string) bool {
 	return false
 }
 
-func lock(ty string, id int, token string) bool {
-	key := lockKey{Type: ty, Id: id}
+func lock(w http.ResponseWriter, r *http.Request) {
+	obj, _, ty, id := params(r)
+	if obj == nil || id == 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	token := r.Header.Get("x-access-token")
+
+	key := lockKey{Type: ty, ID: id}
 
 	if !lockable(key, token) {
-		return false
+		w.WriteHeader(http.StatusForbidden)
+		return
 	}
 
 	value := lockValue{Date: time.Now(), Token: token}
 	locks.Store(key, value)
-
-	return true
 }
 
-func unlock(ty string, id int, token string) bool {
-	key := lockKey{Type: ty, Id: id}
+func unlock(w http.ResponseWriter, r *http.Request) {
+	obj, _, ty, id := params(r)
+	if obj == nil || id == 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	token := r.Header.Get("x-access-token")
+
+	key := lockKey{Type: ty, ID: id}
 
 	if !lockable(key, token) {
-		return false
+		w.WriteHeader(http.StatusForbidden)
+		return
 	}
 
 	locks.Delete(key)
-
-	return true
-}
-
-func Lock(w http.ResponseWriter, r *http.Request) {
-	obj, _, ty, id := params(r)
-	if obj == nil || id == 0 {
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	token := r.Header.Get("x-access-token")
-
-	if lock(ty, id, token) {
-		w.WriteHeader(http.StatusAlreadyReported)
-		return
-	}
-}
-
-func Unlock(w http.ResponseWriter, r *http.Request) {
-	obj, _, ty, id := params(r)
-	if obj == nil || id == 0 {
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	token := r.Header.Get("x-access-token")
-
-	if unlock(ty, id, token) {
-		w.WriteHeader(http.StatusAlreadyReported)
-		return
-	}
 }

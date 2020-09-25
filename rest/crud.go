@@ -1,44 +1,36 @@
-package system
+package rest
 
 import (
 	"encoding/json"
 	"fmt"
-	"jws/model"
+	"jws/orm"
 	"net/http"
 	"strconv"
-
-	"github.com/gorilla/mux"
 )
 
-func params(r *http.Request) (interface{}, interface{}, string, int) {
-	obj, slice := model.ObjModel(mux.Vars(r)["type"])
-	ty := mux.Vars(r)["type"]
-	id, _ := strconv.Atoi(mux.Vars(r)["id"])
-	return obj, slice, ty, id
-}
+const recordsPerPage = 50
+const maxRecordsPerPage = 250
 
-const RECORDS_PER_PAGE = 50
-const MAX_RECORDS_PER_PAGE = 250
-
-func View(w http.ResponseWriter, r *http.Request) {
+func list(w http.ResponseWriter, r *http.Request) {
 	obj, slice, _, _ := params(r)
 	if obj == nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	innerDb := DB
+	innerDb := orm.DB
 
 	if ids := r.URL.Query()["id"]; len(ids) > 0 {
 		innerDb = innerDb.Or(ids)
 	}
 
-	innerDb = model.Search(innerDb, obj, r.URL.Query())
-	innerDb = model.Order(innerDb, obj, r.URL.Query())
+	innerDb = orm.Search(innerDb, obj, r.URL.Query())
+	innerDb = orm.Order(innerDb, obj, r.URL.Query())
 
 	records, err := strconv.Atoi(r.URL.Query().Get("records"))
-	if err != nil || records < 1 || records > MAX_RECORDS_PER_PAGE {
-		records = RECORDS_PER_PAGE
+	if err != nil || records < 1 || records > maxRecordsPerPage {
+		records = recordsPerPage
+
 	}
 
 	page, err := strconv.Atoi(r.URL.Query().Get("page"))
@@ -76,7 +68,7 @@ func View(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, json)
 }
 
-func Create(w http.ResponseWriter, r *http.Request) {
+func create(w http.ResponseWriter, r *http.Request) {
 	obj, _, _, _ := params(r)
 	if obj == nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -89,7 +81,7 @@ func Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res := DB.Create(obj)
+	res := orm.DB.Create(obj)
 	if res.RowsAffected == 0 {
 		w.WriteHeader(http.StatusNotFound)
 		return
@@ -106,14 +98,14 @@ func Create(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, json)
 }
 
-func Retrieve(w http.ResponseWriter, r *http.Request) {
+func retrieve(w http.ResponseWriter, r *http.Request) {
 	obj, _, _, id := params(r)
 	if obj == nil || id == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	res := DB.First(obj, id)
+	res := orm.DB.First(obj, id)
 	if res.RowsAffected == 0 {
 		w.WriteHeader(http.StatusNotFound)
 		return
@@ -130,7 +122,7 @@ func Retrieve(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, json)
 }
 
-func Update(w http.ResponseWriter, r *http.Request) {
+func update(w http.ResponseWriter, r *http.Request) {
 	obj, _, _, _ := params(r)
 	if obj == nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -143,7 +135,7 @@ func Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res := DB.Save(obj)
+	res := orm.DB.Save(obj)
 	if res.RowsAffected == 0 {
 		w.WriteHeader(http.StatusNotFound)
 		return
@@ -160,14 +152,14 @@ func Update(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, json)
 }
 
-func Delete(w http.ResponseWriter, r *http.Request) {
+func delete(w http.ResponseWriter, r *http.Request) {
 	obj, _, _, id := params(r)
 	if obj == nil || id == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	res := DB.Delete(obj, id)
+	res := orm.DB.Delete(obj, id)
 	if res.RowsAffected == 0 {
 		w.WriteHeader(http.StatusNotFound)
 		return
